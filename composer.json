@@ -21,7 +21,7 @@
     ],
     "require": {
         "php": ">=7.2",
-        "guzzlehttp/guzzle": "^6.5"
+        "guzzlehttp/guzzle": "^7.4.5"
     },
     "require-dev": {
         "phpstan/phpstan": "*",
