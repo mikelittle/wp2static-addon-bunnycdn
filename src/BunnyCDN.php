@@ -8,265 +8,269 @@ use GuzzleHttp\Client;
 
 class BunnyCDN {
 
-    private $accountAPIKey;
-    private $storageZoneName;
-    private $storageZoneAccessKey;
-    private $pullZoneID;
+	private string $accountAPIKey;
+	private string $storageZoneName;
+	private string $storageZoneAccessKey;
+	private int $pullZoneID;
+	private Client $accountClient;
+	private array $accountHeaders;
+	private Client $storageZoneclient;
+	private array $storageZoneheaders;
 
-    public function __construct() {
-        $this->storageZoneAccessKey = '';
-        $this->pullZoneID = 0;
-        $this->accountAPIKey = \WP2Static\CoreOptions::encrypt_decrypt(
-            'decrypt',
-            Controller::getValue( 'bunnycdnAccountAPIKey' )
-        );
-        $this->storageZoneName = Controller::getValue( 'bunnycdnStorageZoneName' );
+	public function __construct() {
+		$this->storageZoneAccessKey = '';
+		$this->pullZoneID           = 0;
+		$this->accountAPIKey        = \WP2Static\CoreOptions::encrypt_decrypt(
+			'decrypt',
+			Controller::getValue( 'bunnycdnAccountAPIKey' )
+		);
+		$this->storageZoneName      = Controller::getValue( 'bunnycdnStorageZoneName' );
 
-        if ( ! $this->accountAPIKey || ! $this->storageZoneName ) {
-            $err = 'Unable to connect to BunnyCDN API without ' .
-            'Account API Key, Storage Zone Name, Storage Zone Access Key & Pull Zone ID';
-            \WP2Static\WsLog::l( $err );
-        }
+		if ( ! $this->accountAPIKey || ! $this->storageZoneName ) {
+			$err = 'Unable to connect to BunnyCDN API without ' .
+			       'Account API Key, Storage Zone Name, Storage Zone Access Key & Pull Zone ID';
+			\WP2Static\WsLog::l( $err );
+		}
 
-        $this->accountClient = new Client( [ 'base_uri' => 'https://bunnycdn.com' ] );
+		$this->accountClient = new Client( [ 'base_uri' => 'https://api.bunnycdn.com' ] );
 
-        $this->accountHeaders = [ 'AccessKey' =>  $this->accountAPIKey ];
+		$this->accountHeaders = [ 'AccessKey' => $this->accountAPIKey ];
 
-        // get list of Storage Zones to find ID
-        // get Storage Zone Access Key using Account API Key
-        $res = $this->accountClient->request(
-            'GET',
-            "api/storagezone",
-            [
-                'headers' => $this->accountHeaders,
-            ],
-        );
+		// get list of Storage Zones to find ID
+		// get Storage Zone Access Key using Account API Key
+		$res = $this->accountClient->request(
+			'GET',
+			"api/storagezone",
+			[
+				'headers' => $this->accountHeaders,
+			],
+		);
 
-        $result = json_decode( (string) $res->getBody() );
+		$result = json_decode( (string) $res->getBody() );
 
-        if ( $result ) {
-            foreach ( $result as $storageZone ) {
-                if ( $storageZone->Name === $this->storageZoneName ) {
-                    // validate if pull zone is connected
-                    if ( ! $storageZone->PullZones ) {
-                        $err = 'No Pull Zone found attached to this Storage Zone, please check.';
-                        \WP2Static\WsLog::l( $err );
-                        error_log($err);
-                    }
+		if ( $result ) {
+			foreach ( $result as $storageZone ) {
+				if ( $storageZone->Name === $this->storageZoneName ) {
+					// validate if pull zone is connected
+					if ( ! $storageZone->PullZones ) {
+						$err = 'No Pull Zone found attached to this Storage Zone, please check.';
+						\WP2Static\WsLog::l( $err );
+						error_log( $err );
+					}
 
-                    if ( count( $storageZone->PullZones ) > 1 ) {
-                        $notice = 'Multiple Pull Zones attached to Storage Zone, using first.';
-                        \WP2Static\WsLog::l( $notice );
-                        error_log($notice);
-                    }
+					if ( count( $storageZone->PullZones ) > 1 ) {
+						$notice = 'Multiple Pull Zones attached to Storage Zone, using first.';
+						\WP2Static\WsLog::l( $notice );
+						error_log( $notice );
+					}
 
-                    // use first connected PullZone ID
-                    $this->pullZoneID = $storageZone->PullZones[0]->Id;
-                    $notice = "Using Pull Zone ID $this->pullZoneID.";
-                    \WP2Static\WsLog::l( $notice );
-                    error_log( $notice );
+					// use first connected PullZone ID
+					$this->pullZoneID = $storageZone->PullZones[0]->Id;
+					$notice           = "Using Pull Zone ID $this->pullZoneID.";
+					\WP2Static\WsLog::l( $notice );
+					error_log( $notice );
 
-                    $this->storageZoneAccessKey = $storageZone->Password;
-                }
-            }
-        }
+					$this->storageZoneAccessKey = $storageZone->Password;
+				}
+			}
+		}
 
-        if ( ! $this->storageZoneAccessKey ) {
-            $err = 'Unable to find Storage Zone by name, please check your input.';
-            \WP2Static\WsLog::l( $err );
-            error_log($err);
-        }
+		if ( ! $this->storageZoneAccessKey ) {
+			$err = 'Unable to find Storage Zone by name, please check your input.';
+			\WP2Static\WsLog::l( $err );
+			error_log( $err );
+		}
 
-        $this->storageZoneclient = new Client( [ 'base_uri' => 'https://storage.bunnycdn.com' ] );
+		$this->storageZoneclient = new Client( [ 'base_uri' => 'https://storage.bunnycdn.com' ] );
 
-        $this->storageZoneheaders = [
-            'AccessKey' => $this->storageZoneAccessKey,
-            'Accept' => 'application/json',
-        ];
-    }
+		$this->storageZoneheaders = [
+			'AccessKey' => $this->storageZoneAccessKey,
+			'Accept'    => 'application/json',
+		];
+	}
 
-    /**
-     * Delete all files and directories in Storage Zone
-     *
-     * Will delete directories without needing to drill down into them
-     *
-     */ 
-    public function delete_storage_zone_files() : bool {
-        $storage_zone_files = $this->list_storage_zone_files();
+	/**
+	 * Delete all files and directories in Storage Zone
+	 *
+	 * Will delete directories without needing to drill down into them
+	 *
+	 */
+	public function delete_storage_zone_files() : bool {
+		$storage_zone_files = $this->list_storage_zone_files();
 
-        foreach ( $storage_zone_files as $file ) {
-            $res = $this->storageZoneclient->request(
-                'DELETE',
-                "$this->storageZoneName/$file",
-                [
-                    'headers' => $this->storageZoneheaders,
-                ],
-            );
+		foreach ( $storage_zone_files as $file ) {
+			$res = $this->storageZoneclient->request(
+				'DELETE',
+				"$this->storageZoneName/$file",
+				[
+					'headers' => $this->storageZoneheaders,
+				],
+			);
 
-            $result = json_decode( (string) $res->getBody() );
+			$result = json_decode( (string) $res->getBody() );
 
-            if ( ! $result ) {
-                return false;
-            }
-        }
-        
-        return true; 
-    }
+			if ( ! $result ) {
+				return false;
+			}
+		}
 
-    /**
-     * List all files within Storage Zone
-     *
-     * TODO: write Iterator to get nested files
-     *
-     * @return string[] list of files
-     */
-    public function list_storage_zone_files() : array{
-        $storage_zone_files = [];
+		return true;
+	}
 
-        $res = $this->storageZoneclient->request(
-            'GET',
-            "$this->storageZoneName/",
-            [
-                'headers' => $this->storageZoneheaders,
-            ],
-        );
+	/**
+	 * List all files within Storage Zone
+	 *
+	 * TODO: write Iterator to get nested files
+	 *
+	 * @return string[] list of files
+	 */
+	public function list_storage_zone_files() : array {
+		$storage_zone_files = [];
 
-        $result = json_decode( (string) $res->getBody() );
+		$res = $this->storageZoneclient->request(
+			'GET',
+			"$this->storageZoneName/",
+			[
+				'headers' => $this->storageZoneheaders,
+			],
+		);
 
-        if ( $result ) {
-            foreach ( $result as $path ) {
-                if ( $path->IsDirectory ) {
-                    $storage_zone_files[] = $path->ObjectName . "/";
-                } else {
-                    $storage_zone_files[] = $path->ObjectName;
-                }
-            } 
-        }
-        
-        return $storage_zone_files; 
-    }
+		$result = json_decode( (string) $res->getBody() );
 
-    public function upload_files( string $processed_site_path ) : void {
-        if ( ! is_dir( $processed_site_path ) ) {
-            return;
-        }
+		if ( $result ) {
+			foreach ( $result as $path ) {
+				if ( $path->IsDirectory ) {
+					$storage_zone_files[] = $path->ObjectName . "/";
+				} else {
+					$storage_zone_files[] = $path->ObjectName;
+				}
+			}
+		}
 
-        // iterate each file in ProcessedSite
-        $iterator = new RecursiveIteratorIterator(
-            new RecursiveDirectoryIterator(
-                $processed_site_path,
-                RecursiveDirectoryIterator::SKIP_DOTS
-            )
-        );
+		return $storage_zone_files;
+	}
 
-        foreach ( $iterator as $filename => $file_object ) {
-            $base_name = basename( $filename );
-            if ( $base_name != '.' && $base_name != '..' ) {
-                $real_filepath = realpath( $filename );
+	public function upload_files( string $processed_site_path ) : void {
+		if ( ! is_dir( $processed_site_path ) ) {
+			return;
+		}
 
-                // TODO: do filepaths differ when running from WP-CLI (non-chroot)?
-                $cache_key = str_replace( $processed_site_path, '', $filename );
+		// iterate each file in ProcessedSite
+		$iterator = new RecursiveIteratorIterator(
+			new RecursiveDirectoryIterator(
+				$processed_site_path,
+				RecursiveDirectoryIterator::SKIP_DOTS
+			)
+		);
 
-                if ( \WP2Static\DeployCache::fileisCached( $cache_key ) ) {
-                    continue;
-                }
+		foreach ( $iterator as $filename => $file_object ) {
+			$base_name = basename( $filename );
+			if ( $base_name != '.' && $base_name != '..' ) {
+				$real_filepath = realpath( $filename );
 
-                if ( ! $real_filepath ) {
-                    $err = 'Trying to deploy unknown file to BunnyCDN: ' . $filename;
-                    \WP2Static\WsLog::l( $err );
-                    continue;
-                }
+				// TODO: do filepaths differ when running from WP-CLI (non-chroot)?
+				$cache_key = str_replace( $processed_site_path, '', $filename );
 
-                // Standardise all paths to use / (Windows support)
-                // TODO: apply WP method of get_safe_path or such
-                $filename = str_replace( '\\', '/', $filename );
+				if ( \WP2Static\DeployCache::fileisCached( $cache_key ) ) {
+					continue;
+				}
 
-                if ( ! is_string( $filename ) ) {
-                    continue;
-                }
+				if ( ! $real_filepath ) {
+					$err = 'Trying to deploy unknown file to BunnyCDN: ' . $filename;
+					\WP2Static\WsLog::l( $err );
+					continue;
+				}
 
-                $remote_path = ltrim( $cache_key, '/' );
+				// Standardise all paths to use / (Windows support)
+				// TODO: apply WP method of get_safe_path or such
+				$filename = str_replace( '\\', '/', $filename );
 
-                $res = $this->storageZoneclient->request(
-                    'PUT',
-                    "$this->storageZoneName/$remote_path",
-                    [
-                        'headers' => $this->storageZoneheaders,
-                        'body' => file_get_contents( $filename ),
-                    ],
-                );
+				if ( ! is_string( $filename ) ) {
+					continue;
+				}
 
-                $result = json_decode( (string) $res->getBody() );
+				$remote_path = ltrim( $cache_key, '/' );
 
-                if ( $result ) {
-                    error_log(print_r($result, true));
-                   
-                    // TODO: Look for 201 status from Bunny 
-                    // if ( $result['@metadata']['statusCode'] === 200 ) {
-                    //     \WP2Static\DeployCache::addFile( $cache_key );
-                    // }
+				$res = $this->storageZoneclient->request(
+					'PUT',
+					"$this->storageZoneName/$remote_path",
+					[
+						'headers' => $this->storageZoneheaders,
+						'body'    => file_get_contents( $filename ),
+					],
+				);
 
-                    // TODO: purge cache on each of these or on hook? 
-                }
-            }
-        }
-    }
+				$result = json_decode( (string) $res->getBody() );
 
-    public static function bunnycdn_purge_cache( string $enabled_deployer ) : void {
-        if ( $enabled_deployer !== 'wp2static-addon-bunnycdn' ) {
-            return;
-        }
+				if ( $result ) {
+					error_log( print_r( $result, true ) );
 
-        error_log('calling cache purge');
+					// TODO: Look for 201 status from Bunny
+					// if ( $result['@metadata']['statusCode'] === 200 ) {
+					//     \WP2Static\DeployCache::addFile( $cache_key );
+					// }
 
-        // try {
-        //     $endpoint = 'https://bunnycdn.com/api/pullzone/' .
-        //         $this->pull_zone_id . '/purgeCache';
+					// TODO: purge cache on each of these or on hook?
+				}
+			}
+		}
+	}
 
-        //     $ch = curl_init();
+	public static function bunnycdn_purge_cache( string $enabled_deployer ) : void {
+		if ( $enabled_deployer !== 'wp2static-addon-bunnycdn' ) {
+			return;
+		}
 
-        //     curl_setopt( $ch, CURLOPT_CUSTOMREQUEST, 'POST' );
-        //     curl_setopt( $ch, CURLOPT_URL, $endpoint );
-        //     curl_setopt( $ch, CURLOPT_RETURNTRANSFER, 1 );
-        //     curl_setopt( $ch, CURLOPT_SSL_VERIFYHOST, 0 );
-        //     curl_setopt( $ch, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1 );
-        //     curl_setopt( $ch, CURLOPT_SSL_VERIFYPEER, 0 );
-        //     curl_setopt( $ch, CURLOPT_FOLLOWLOCATION, 0 );
-        //     curl_setopt( $ch, CURLOPT_POST, 1 );
+		error_log( 'calling cache purge' );
 
-        //     curl_setopt(
-        //         $ch,
-        //         CURLOPT_HTTPHEADER,
-        //         array(
-        //             'Content-Type: application/json',
-        //             'Content-Length: 0',
-        //             'AccessKey: ' .
-        //                 $this->pull_zone_access_key,
-        //         )
-        //     );
+		// try {
+		//     $endpoint = 'https://bunnycdn.com/api/pullzone/' .
+		//         $this->pull_zone_id . '/purgeCache';
 
-        //     $output = curl_exec( $ch );
-        //     $status_code = curl_getinfo( $ch, CURLINFO_HTTP_CODE );
+		//     $ch = curl_init();
 
-        //     curl_close( $ch );
+		//     curl_setopt( $ch, CURLOPT_CUSTOMREQUEST, 'POST' );
+		//     curl_setopt( $ch, CURLOPT_URL, $endpoint );
+		//     curl_setopt( $ch, CURLOPT_RETURNTRANSFER, 1 );
+		//     curl_setopt( $ch, CURLOPT_SSL_VERIFYHOST, 0 );
+		//     curl_setopt( $ch, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1 );
+		//     curl_setopt( $ch, CURLOPT_SSL_VERIFYPEER, 0 );
+		//     curl_setopt( $ch, CURLOPT_FOLLOWLOCATION, 0 );
+		//     curl_setopt( $ch, CURLOPT_POST, 1 );
 
-        //     $good_response_codes = array( '100', '200', '201', '302' );
+		//     curl_setopt(
+		//         $ch,
+		//         CURLOPT_HTTPHEADER,
+		//         array(
+		//             'Content-Type: application/json',
+		//             'Content-Length: 0',
+		//             'AccessKey: ' .
+		//                 $this->pull_zone_access_key,
+		//         )
+		//     );
 
-        //     if ( ! in_array( $status_code, $good_response_codes ) ) {
-        //         $err =
-        //             'BAD RESPONSE DURING BUNNYCDN PURGE CACHE: ' . $status_code;
-        //         WsLog::l( $err );
-        //         throw new Exception( $err );
+		//     $output = curl_exec( $ch );
+		//     $status_code = curl_getinfo( $ch, CURLINFO_HTTP_CODE );
 
-        //         echo 'FAIL';
-        //     }
+		//     curl_close( $ch );
 
-        //     if ( ! defined( 'WP_CLI' ) ) {
-        //         echo 'SUCCESS';
-        //     }
-        // } catch ( Exception $e ) {
-        //     WsLog::l( 'BUNNYCDN EXPORT: error encountered' );
-        //     WsLog::l( $e );
-        // }
-    }
+		//     $good_response_codes = array( '100', '200', '201', '302' );
+
+		//     if ( ! in_array( $status_code, $good_response_codes ) ) {
+		//         $err =
+		//             'BAD RESPONSE DURING BUNNYCDN PURGE CACHE: ' . $status_code;
+		//         WsLog::l( $err );
+		//         throw new Exception( $err );
+
+		//         echo 'FAIL';
+		//     }
+
+		//     if ( ! defined( 'WP_CLI' ) ) {
+		//         echo 'SUCCESS';
+		//     }
+		// } catch ( Exception $e ) {
+		//     WsLog::l( 'BUNNYCDN EXPORT: error encountered' );
+		//     WsLog::l( $e );
+		// }
+	}
 }

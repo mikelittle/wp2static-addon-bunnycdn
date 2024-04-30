@@ -119,7 +119,7 @@ class Controller {
     }
 
     public static function renderBunnyCDNPage() : void {
-        add_filter('parent_file', [ $this, 'setActiveParentMenu' ]);
+        add_filter('parent_file', [ __CLASS__, 'setActiveParentMenu' ]);
 
         $view = [];
         $view['nonce_action'] = 'wp2static-bunnycdn-options';
@@ -292,19 +292,19 @@ class Controller {
         return $option_value;
     }
 
-    public function addOptionsPage() : void {
+    public static function addOptionsPage() : void {
          add_submenu_page(
              null,
              'BunnyCDN Deployment Options',
              'BunnyCDN Deployment Options',
              'manage_options',
              'wp2static-addon-bunnycdn',
-             [ $this, 'renderBunnyCDNPage' ]
+             [ __CLASS__, 'renderBunnyCDNPage' ]
          );
     }
 
     // ensure WP2Static menu is active for addon
-    public function setActiveParentMenu() {
+    public static function setActiveParentMenu() {
         global $plugin_page;
 
         if ('wp2static-addon-bunnycdn' === $plugin_page) {
@@ -313,4 +313,3 @@ class Controller {
         }
     }
 }
-
