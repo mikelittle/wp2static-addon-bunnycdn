@@ -43,6 +43,22 @@
                 />
             </td>
         </tr>
+
+        <tr>
+            <td style="width:50%;">
+                <label
+                    for="<?php echo $view['options']['bunnycdnStorageEndpointHostname']->name; ?>"
+                ><?php echo $view['options']['bunnycdnStorageEndpointHostname']->label; ?></label>
+            </td>
+            <td>
+                <input
+                    id="<?php echo $view['options']['bunnycdnStorageEndpointHostname']->name; ?>"
+                    name="<?php echo $view['options']['bunnycdnStorageEndpointHostname']->name; ?>"
+                    type="text"
+                    value="<?php echo $view['options']['bunnycdnStorageEndpointHostname']->value !== '' ? $view['options']['bunnycdnStorageEndpointHostname']->value : ''; ?>"
+                />
+            </td>
+        </tr>
     </tbody>
 </table>
 

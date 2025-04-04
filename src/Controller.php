@@ -99,6 +99,16 @@ class Controller {
         );
 
         $wpdb->query( $query );
+
+        $query = $wpdb->prepare(
+            $query_string,
+            'bunnycdnStorageEndpointHostname',
+            '',
+            'Storage Zone Hostname',
+            ''
+        );
+
+        $wpdb->query( $query );
     }
 
     /**
@@ -264,6 +274,12 @@ class Controller {
             [ 'name' => 'bunnycdnStorageZoneName' ]
         );
 
+        $wpdb->update(
+            $table_name,
+            [ 'value' => sanitize_text_field( $_POST['bunnycdnStorageEndpointHostname'] ) ],
+            [ 'name' => 'bunnycdnStorageEndpointHostname' ]
+        );
+
         wp_safe_redirect( admin_url( 'admin.php?page=wp2static-bunnycdn' ) );
         exit;
     }
@@ -294,7 +310,7 @@ class Controller {
 
     public static function addOptionsPage() : void {
          add_submenu_page(
-             null,
+             'wp2static',
              'BunnyCDN Deployment Options',
              'BunnyCDN Deployment Options',
              'manage_options',

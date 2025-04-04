@@ -25,6 +25,7 @@ class BunnyCDN {
 			Controller::getValue( 'bunnycdnAccountAPIKey' )
 		);
 		$this->storageZoneName      = Controller::getValue( 'bunnycdnStorageZoneName' );
+		$this->StorageEndpointHostname = Controller::getValue( 'bunnycdnStorageEndpointHostname' ) ?? 'storage.bunnycdn.com';
 
 		if ( ! $this->accountAPIKey || ! $this->storageZoneName ) {
 			$err = 'Unable to connect to BunnyCDN API without ' .
@@ -32,7 +33,7 @@ class BunnyCDN {
 			\WP2Static\WsLog::l( $err );
 		}
 
-		$this->accountClient = new Client( [ 'base_uri' => 'https://api.bunnycdn.com' ] );
+		$this->accountClient = new Client( [ 'base_uri' => 'https://api.bunny.net' ] );
 
 		$this->accountHeaders = [ 'AccessKey' => $this->accountAPIKey ];
 
@@ -40,7 +41,7 @@ class BunnyCDN {
 		// get Storage Zone Access Key using Account API Key
 		$res = $this->accountClient->request(
 			'GET',
-			"api/storagezone",
+			"storagezone",
 			[
 				'headers' => $this->accountHeaders,
 			],
@@ -81,7 +82,7 @@ class BunnyCDN {
 			error_log( $err );
 		}
 
-		$this->storageZoneclient = new Client( [ 'base_uri' => 'https://storage.bunnycdn.com' ] );
+		$this->storageZoneclient = new Client( [ 'base_uri' => $this->StorageEndpointHostname ] );
 
 		$this->storageZoneheaders = [
 			'AccessKey' => $this->storageZoneAccessKey,
